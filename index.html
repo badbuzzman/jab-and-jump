@@ -64,7 +64,7 @@ details ul{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:14px;d
     <div class="mode"><span class="tag">Ready</span><b>Jump rope HIIT</b><p>Sprints, double-under bursts and rest breaks set to generated beats, with a voice coach calling each change. Free mode gives you a steady timed round.</p></div>
     <div class="mode"><span class="tag">Ready</span><b>Nunchucks</b><p>One real-physics nunchuck. Whip the free stick to smash boards, and squeeze grip with your empty hand near the stick to catch it and switch hands.</p></div>
     <div class="mode"><span class="tag">Ready</span><b>Kung fu</b><p>Fight your way up a temple, floor by floor. Punch fighters from every side, swat knives back at their throwers, and block, duck or jump the boss.</p></div>
-    <div class="mode soon"><span class="tag">Next</span><b>Boxing</b><p>Punch pads that fly at you and duck the bars. Coming in a later build.</p></div>
+    <div class="mode"><span class="tag">Ready</span><b>Ringside Rumble</b><p>Box your way up a ladder of four original fighters. Read each tell, lean or duck to dodge, then counter. Squeeze grip as you punch to throw a star punch.</p></div>
     <div class="actions">
       <button class="btn primary" id="btnAR" disabled>Start in passthrough <small>See your room</small></button>
       <button class="btn secondary" id="btnVR" disabled>Start in VR <small>Boxing gym</small></button>
@@ -91,6 +91,10 @@ details ul{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:14px;d
   <button id="btnSwitch" hidden>Switch hands</button>
   <button id="btnDuck" hidden>Duck (hold)</button>
   <button id="btnBlock" hidden>Block (hold)</button>
+  <button id="btnLeanL" hidden>◀ Lean</button>
+  <button id="btnLeanR" hidden>Lean ▶</button>
+  <button id="btnStar" hidden>★ Star</button>
+  <button id="btnUp" hidden>Get up!</button>
   <button id="btnEnd" hidden>End round</button>
 </div>
 
@@ -548,13 +552,13 @@ function buzz(side, v, ms){
 const buzzBoth = (v, ms) => { buzz('left', v, ms); buzz('right', v, ms); };
 
 /* ---------- storage ---------- */
-let best = { streak:0, skips:0, doubles:0, score:0, chucks:0, kf:0, floor:0 };
+let best = { streak:0, skips:0, doubles:0, score:0, chucks:0, kf:0, floor:0, box:0, boxRank:0 };
 try { best = { ...best, ...JSON.parse(localStorage.getItem('jabjump.rope.v1') || '{}') }; } catch (e) {}
 const saveBest = () => { try { localStorage.setItem('jabjump.rope.v1', JSON.stringify(best)); } catch (e) {} };
 
 /* ---------- game state ---------- */
 const ROUNDS = [60, 120, 180];
-const MODES = ['HIIT', 'FREE', 'CHUCKS', 'KUNG FU'];
+const MODES = ['HIIT', 'FREE', 'CHUCKS', 'KUNG FU', 'BOXING'];
 const chucksMode = () => MODES[G.modeIdx] === 'CHUCKS';
 const BLOCKS = {
   warm:    { name:'WARM UP', style:'steady', bpm:116, color:0x37c6f4, tip:'Easy rhythm. Find your bounce.', pv:95, call:'Warm up. Easy rhythm.' },
@@ -563,12 +567,14 @@ const BLOCKS = {
   doubles: { name:'DOUBLE UNDERS', style:'doubles', bpm:100, color:0xf4c430, tip:'Jump high, turn twice. 3 clears it.', pv:150, goal:3, call:'Double unders! Jump high!' },
   rest:    { name:'REST', style:'rest', bpm:90, color:0xa3acc4, tip:'Breathe. Trips do not count.', pv:0, call:'Rest. Breathe.' },
   chucks:  { name:'NUNCHUCKS', style:'sprint', bpm:132, color:0xff5b4f, tip:'Smash boards. Grip with your empty hand to switch.', pv:0, call:'Nunchucks! Smash the boards!' },
+  boxing:  { name:'RINGSIDE RUMBLE', style:'steady', bpm:118, color:0xff5b4f, tip:'Read the tell, dodge, then counter.', pv:0, call:'' },
   kungfu:  { name:'FLOOR 1', style:'kungfu', bpm:114, color:0xd9a426, tip:'Strike fighters before they reach you.', pv:0, call:'' },
   free:    { name:'FREE SKIP', style:'steady', bpm:124, color:0x37c6f4, tip:'Skip at your own pace.', pv:100, call:'Go!' },
 };
 const hexStr = (n) => '#' + n.toString(16).padStart(6, '0');
 function buildProgram(total, mode){
   if (mode === 'FREE') return [{ ...BLOCKS.free, type:'free', dur:total }];
+  if (mode === 'BOXING') return [{ ...BLOCKS.boxing, type:'boxing', dur:1e9 }];
   if (mode === 'KUNG FU') return [{ ...BLOCKS.kungfu, type:'kungfu', dur:1e9 }];
   if (mode === 'CHUCKS') return [{ ...BLOCKS.chucks, type:'chucks', dur:total }];
   const out = []; let t = 0;
@@ -609,16 +615,16 @@ function drawTitle(){
     c.fillStyle = '#a3acc4'; c.font = `600 36px ${FB}`;
     c.fillText(G.platform === 'xr' ? 'Touch START with either hand.' : 'Tap START to begin.', 72, 228);
     c.fillStyle = '#eef1f8'; c.font = `500 30px ${FB}`;
-    c.fillText({ HIIT:'HIIT: sprints, double-under bursts and rests to the beat.', FREE:'Free: one steady timed jump rope round.', CHUCKS:`Nunchucks: smash boards. Best score ${best.chucks.toLocaleString()}.`, 'KUNG FU':`Kung fu: clear temple floors. Best ${(best.kf||0).toLocaleString()}, floor ${best.floor||0}.` }[MODES[G.modeIdx]], 72, 272);
+    c.fillText({ HIIT:'HIIT: sprints, double-under bursts and rests to the beat.', FREE:'Free: one steady timed jump rope round.', CHUCKS:`Nunchucks: smash boards. Best score ${best.chucks.toLocaleString()}.`, 'KUNG FU':`Kung fu: clear temple floors. Best ${(best.kf||0).toLocaleString()}, floor ${best.floor||0}.`, BOXING:`Boxing: fight ${Math.min((best.boxRank||0)+1, 4)} of 4 vs ${BOXERS[Math.min(best.boxRank||0, 3)].name}.` }[MODES[G.modeIdx]], 72, 272);
     stat(c, 72, 318, 'Best score', best.score.toLocaleString(), '#f4c430', 66);
     stat(c, 380, 318, 'Best streak', String(best.streak), '#37c6f4', 66);
     stat(c, 680, 318, 'Doubles', String(best.doubles), '#eef1f8', 66);
   });
 }
-function setRoundLabel(){ padTime.setLabel(fmtTime(ROUNDS[G.roundIdx]), 'round'); padMode.setLabel(MODES[G.modeIdx], 'mode'); padStart.setLabel('START', kfMode() ? 'kung fu' : chucksMode() ? 'nunchucks' : 'jump rope'); }
+function setRoundLabel(){ padTime.setLabel(fmtTime(ROUNDS[G.roundIdx]), 'round'); padMode.setLabel(MODES[G.modeIdx], 'mode'); padStart.setLabel(bxMode() ? 'FIGHT' : 'START', bxMode() ? 'vs ' + bxOpp().short : kfMode() ? 'kung fu' : chucksMode() ? 'nunchucks' : 'jump rope'); }
 
 function enterMenu(){
-  alignStage(); Music.stop(); visBars.visible = false; hideChucks(); kfHide();
+  alignStage(); Music.stop(); visBars.visible = false; hideChucks(); kfHide(); bxHide();
   G.mode = 'menu'; menu.visible = true; results.visible = false;
   hud.mesh.visible = false; countP.mesh.visible = false;
   if (ropeMesh) ropeMesh.visible = false;
@@ -634,6 +640,7 @@ function startRound(){
   R.lastPhase = Math.floor((R.theta - Math.PI) / TAU); R.whooshPhase = Math.floor((R.theta - Math.PI*0.5) / TAU);
   hands.left.cInit = hands.right.cInit = false;
   if (kfMode()) kfStart();
+  if (bxMode()) { stage.worldToLocal(headL.copy(head.pos)); bxSetup(); }
   if (chucksMode()) { G.chHand = 'right'; for (const ch of chucks) ch.reset = true; for (const b of boards) { b.live = false; b.m.visible = false; } G.nextBoard = now + 3.6; }
   drawHud(); updateDock();
 }
@@ -644,6 +651,7 @@ function endRound(){
   say(`Workout complete. ${S.score} points.`);
   if (chucksMode()) { endChucks(secs); return; }
   if (kfMode()) { endKF(secs); return; }
+  if (bxMode()) { endBX(secs); return; }
   const kcal = Math.round(11 * 3.5 * 75 / 200 * secs / 60);
   const rec = [];
   if (S.score > best.score) { best.score = S.score; rec.push('score'); }
@@ -679,19 +687,33 @@ function drawHud(){
     const col = cd ? '#eef1f8' : hexStr(blk ? blk.color : C.rope);
     const be = cd ? 0 : now - G.bStart, bl = blk ? blk.dur - be : 0;
     c.textAlign = 'left'; c.fillStyle = col; c.font = `900 76px ${FD}`; c.fillText(cd ? 'GET READY' : blk.name, 50, 96);
-    const kf = kfMode();
+    const kf = kfMode() || bxMode(), bxm = bxMode();
     c.textAlign = 'right'; c.fillStyle = kf ? '#ff5b4f' : '#eef1f8';
-    if (kf) { c.font = `700 64px ${FB}`; c.fillText('♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 5 - S.hp)), w - 50, 92); c.font = `900 76px ${FD}`; }
+    if (bxm) { c.fillStyle = '#eef1f8'; c.fillText(X.state === 'break' ? 'BREAK' : `R${X.round} ${fmtTime(Math.max(0, X.roundLen - (now - (X.roundStart || now))))}`, w - 50, 96); }
+    else if (kf) { c.font = `700 64px ${FB}`; c.fillText('♥'.repeat(Math.max(0, S.hp)) + '♡'.repeat(Math.max(0, 5 - S.hp)), w - 50, 92); c.font = `900 76px ${FD}`; }
     else c.fillText(cd ? '' : fmtTime(bl), w - 50, 96);
     c.textAlign = 'left'; c.fillStyle = kf && K.threat ? '#f4c430' : '#a3acc4'; c.font = `600 27px ${FB}`;
-    c.fillText(cd ? (kf ? 'Fists up. Fighters come from every side.' : chucksMode() ? 'Get a feel for the swing.' : 'Start turning your wrists.') : (kf && K.threat) || blk.tip, 52, 138);
+    c.fillText(cd ? (bxm ? 'Gloves up. Watch for his tells.' : kf ? 'Fists up. Fighters come from every side.' : chucksMode() ? 'Get a feel for the swing.' : 'Start turning your wrists.') : (kf && K.threat) || blk.tip, 52, 138);
     const nb = G.prog?.[cd ? 0 : G.bi + 1];
     if (nb) { c.textAlign = 'right'; c.fillText((cd ? 'FIRST: ' : 'NEXT: ') + nb.name, w - 50, 138); }
     c.fillStyle = 'rgba(255,255,255,0.12)'; rr(c, 50, 158, w - 100, 16, 8); c.fill();
     if (!cd && blk && !kf) { c.fillStyle = col; rr(c, 50, 158, Math.max(16, (w - 100) * Math.min(1, be / blk.dur)), 16, 8); c.fill(); }
-    if (!cd && kf) { const tot = 6 + K.floor*3 + 1, done = K.boss ? tot - (fighters.some(e => e.alive && e.t.boss && e.state !== 'ko') ? 1 : 0) : tot - 1 - K.queue.length - fighters.filter(e => e.alive && e.state !== 'ko').length; c.fillStyle = col; rr(c, 50, 158, Math.max(16, (w - 100) * Math.min(1, Math.max(0, done) / tot)), 16, 8); c.fill(); }
+    if (bxm) {
+      const bw = (w - 120) / 2;
+      c.fillStyle = 'rgba(255,255,255,0.12)'; rr(c, 50, 158, bw, 16, 8); c.fill(); rr(c, 70 + bw, 158, bw, 16, 8); c.fill();
+      c.fillStyle = '#37c6f4'; rr(c, 50, 158, Math.max(12, bw * Math.max(0, S.hp) / 100), 16, 8); c.fill();
+      c.fillStyle = '#ff5b4f'; const ow = Math.max(12, bw * Math.max(0, X.hp) / (X.max || 1)); rr(c, 70 + 2*bw - ow, 158, ow, 16, 8); c.fill();
+    }
+    else if (!cd && kf) { const tot = 6 + K.floor*3 + 1, done = K.boss ? tot - (fighters.some(e => e.alive && e.t.boss && e.state !== 'ko') ? 1 : 0) : tot - 1 - K.queue.length - fighters.filter(e => e.alive && e.state !== 'ko').length; c.fillStyle = col; rr(c, 50, 158, Math.max(16, (w - 100) * Math.min(1, Math.max(0, done) / tot)), 16, 8); c.fill(); }
     const total = progTotal(), left = cd ? total : total - (now - G.startAt);
     const rpm = now - R.lastPass < 2 ? Math.round(60 / R.interval) : 0, m = multOf(S.streak);
+    if (bxm) {
+      stat(c, 50, 232, 'You', String(Math.max(0, Math.round(S.hp))), '#37c6f4', 96);
+      stat(c, 260, 232, 'Score', (S.score || 0).toLocaleString(), '#f4c430', 96);
+      stat(c, 560, 232, 'Stars', '★'.repeat(S.stars || 0) || '–', '#f4c430', 96);
+      stat(c, 820, 232, (X.opp ? X.opp.short : 'Opp').toUpperCase(), String(Math.max(0, Math.round(X.hp))), '#ff5b4f', 96);
+      return;
+    }
     if (kf) {
       const cm = comboMult(S.combo);
       stat(c, 50, 232, 'Time', fmtTime(cd ? 0 : now - G.startAt), '#eef1f8', 96);
@@ -741,6 +763,7 @@ function startBlock(i){
   Object.assign(B, { passes:0, fast:0, doubles:0, called:false });
   blockColor = blk.color; Music.set(blk.style, blk.bpm);
   if (blk.type === 'kungfu') { kfStartFloor(1); buzzBoth(0.7, 90); return; }
+  if (blk.type === 'boxing') { buzzBoth(0.7, 90); return; }
   if (blk.type === 'sprint' || blk.type === 'doubles') S.challenges++;
   popup(blk.name, hexStr(blk.color), H + 0.02, -1.25);
   say(blk.call); sfx.horn(); buzzBoth(0.7, 90);
@@ -1439,17 +1462,314 @@ function endKF(secs){
   results.visible = true; G.cool = now + 0.8; sfx.chime(); updateDock();
 }
 
+/* ---------- boxing: Ringside Rumble (original fighters) ---------- */
+const bxMode = () => MODES[G.modeIdx] === 'BOXING';
+const BOXERS = [
+  { name:'TITO "TWINKLE TOES" RUIZ', short:'Tito', trunks:0x37c6f4, skin:0xc98d5f, hair:0x2a1a10, scale:0.96, hp:90,  power:0.8,  tell:0.95, cool:[1.6, 2.6], w:{ jab:0.6, hook:0.4, upper:0 },     combo:0,    feint:0,    taunt:0.25, quote:'Watch these feet, amigo!' },
+  { name:'BIG MOE MOUNTAIN',         short:'Moe',  trunks:0x2f8f5a, skin:0xe0b08a, hair:0x5a3a1a, scale:1.22, hp:130, power:1.3,  tell:1.1,  cool:[2.0, 3.0], w:{ jab:0.3, hook:0.4, upper:0.3 },   combo:0,    feint:0,    taunt:0.1,  quote:'The mountain always wins.' },
+  { name:'SILAS "THE FOX" GRAY',     short:'Silas',trunks:0x8a93ad, skin:0x9c6b48, hair:0xd8d8d8, scale:1.0,  hp:110, power:1.0,  tell:0.72, cool:[1.2, 2.2], w:{ jab:0.4, hook:0.35, upper:0.25 }, combo:0.2,  feint:0.3,  taunt:0,    quote:'An old fox knows every trick.' },
+  { name:'THUNDER VEX',              short:'Vex',  trunks:0xf4c430, skin:0x6b4630, hair:0x111111, scale:1.08, hp:140, power:1.25, tell:0.56, cool:[0.9, 1.8], w:{ jab:0.35, hook:0.35, upper:0.3 }, combo:0.45, feint:0.15, taunt:0.05, quote:'The belt stays with me.', champ:true },
+];
+const bxOpp = () => BOXERS[Math.min(best.boxRank || 0, BOXERS.length - 1)];
+
+// opponent model; all coordinates are in the boxer's own space (facing +z, toward you)
+const BX = (() => {
+  const g = new THREE.Group(); g.visible = false; stage.add(g);
+  const mat = (c, r = 0.6, e = {}) => new THREE.MeshStandardMaterial({ color:c, roughness:r, ...e });
+  const skin = mat(0xc98d5f, 0.55), trunks = mat(0x37c6f4, 0.5), white = mat(0xf2f2f2, 0.5), hair = mat(0x2a1a10, 0.85), boot = mat(0x141414, 0.5);
+  const gloveM = [mat(0xc8282a, 0.35, { emissive:0x000000 }), mat(0xc8282a, 0.35, { emissive:0x000000 })];
+  const M = (geo, m, x, y, z, p = g) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); p.add(o); return o; };
+  const body = new THREE.Group(); g.add(body);
+  M(new THREE.CapsuleGeometry(0.2, 0.34, 4, 14), skin, 0, 1.28, 0, body);
+  M(new THREE.CylinderGeometry(0.225, 0.21, 0.26, 18), trunks, 0, 0.98, 0, body);
+  M(new THREE.CylinderGeometry(0.228, 0.228, 0.05, 18), white, 0, 1.1, 0, body);
+  for (const sx of [-1, 1]) {
+    M(new THREE.CapsuleGeometry(0.075, 0.52, 4, 10), skin, sx*0.1, 0.5, 0, body);
+    M(new THREE.BoxGeometry(0.11, 0.12, 0.2), boot, sx*0.1, 0.08, 0.03, body);
+    M(new THREE.SphereGeometry(0.075, 10, 8), skin, sx*0.25, 1.56, 0, body);
+  }
+  const headG = new THREE.Group(); headG.position.set(0, 1.7, 0.01); body.add(headG);
+  M(new THREE.SphereGeometry(0.135, 20, 16), skin, 0, 0, 0, headG);
+  M(new THREE.SphereGeometry(0.142, 20, 12, 0, TAU, 0, Math.PI*0.45), hair, 0, 0.02, -0.01, headG);
+  for (const sx of [-1, 1]) M(new THREE.SphereGeometry(0.035, 8, 6), skin, sx*0.132, 0, 0, headG);
+  const eyeW = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x000000, roughness:0.3 });
+  const eyes = [-1, 1].map(sx => M(new THREE.SphereGeometry(0.024, 10, 8), eyeW, sx*0.048, 0.02, 0.115, headG));
+  const pupils = [-1, 1].map(sx => M(new THREE.SphereGeometry(0.012, 8, 6), mat(0x111111, 0.3), sx*0.048, 0.02, 0.137, headG));
+  const brows = [-1, 1].map(sx => M(new THREE.BoxGeometry(0.05, 0.012, 0.012), hair, sx*0.05, 0.058, 0.122, headG));
+  M(new THREE.SphereGeometry(0.022, 8, 6), skin, 0, -0.012, 0.135, headG);
+  const mouth = M(new THREE.BoxGeometry(0.06, 0.012, 0.01), mat(0x5a1a1a, 0.6), 0, -0.06, 0.122, headG);
+  const shoulders = [new THREE.Vector3(-0.25, 1.55, 0), new THREE.Vector3(0.25, 1.55, 0)];
+  const arms = [0, 1].map(() => M(new THREE.CylinderGeometry(0.055, 0.05, 1, 10), skin, 0, 0, 0));
+  const gloves = [0, 1].map(i => { const o = M(new THREE.SphereGeometry(0.085, 16, 12), gloveM[i], 0, 0, 0); o.scale.set(1, 1, 1.15); return o; });
+  const gPos = [new THREE.Vector3(-0.12, 1.55, 0.22), new THREE.Vector3(0.12, 1.55, 0.22)];
+  const bar = makePanel(512, 48, 0.62); bar.mesh.position.set(0, 2.25, 0); g.add(bar.mesh);
+  return { g, body, headG, skin, trunks, hair, gloveM, eyes, eyeW, pupils, brows, mouth, shoulders, arms, gloves, gPos, bar };
+})();
+const pGloves = SIDES.map(sd => {
+  const g = new THREE.Group(); g.visible = false; scene.add(g);
+  const col = sd === 'left' ? 0x2f6fd6 : 0xd63a3a;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 18, 14), new THREE.MeshStandardMaterial({ color:col, roughness:0.35 })); m.scale.set(1, 0.95, 1.3); g.add(m);
+  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.052, 0.07, 16), new THREE.MeshStandardMaterial({ color:0xf2f2f2, roughness:0.5 })); cuff.rotation.x = Math.PI/2; cuff.position.z = 0.1; g.add(cuff);
+  return g;
+});
+
+sfx.bell = () => { tone(1320, 1.2, 'sine', 0.25, 1300); tone(1980, 0.9, 'sine', 0.12); };
+sfx.thud = (big) => { tone(big ? 70 : 95, 0.18, 'sine', big ? 0.8 : 0.55, 40); noise(0.07, big ? 0.9 : 0.6, 700, 0.8); };
+sfx.blocked = () => { noise(0.05, 0.5, 1500, 1); tone(300, 0.06, 'square', 0.08); };
+sfx.whiff = () => noise(0.18, 0.25, 700, 1.3, 'bandpass', 2600);
+sfx.crowd = (len = 1.6) => noise(len, 0.35, 900, 0.4, 'bandpass');
+sfx.tellCue = (k) => tone(k === 'jab' ? 1500 : k === 'hook' ? 900 : 500, 0.08, 'square', 0.09);
+sfx.star = () => { tone(523, 0.1, 'square', 0.12); tone(784, 0.1, 'square', 0.12, null, 0.08); tone(1046, 0.25, 'square', 0.12, null, 0.16); };
+
+const X = { state:'off', st:0, atk:null, side:'L', hp:100, max:100, guard:'high', guardT:0, nextAtk:0, downs:0, count:0, countT:0, opp:null, hitSnap:0, combo:0, headHits:0,
+  round:1, roundStart:0, roundLen:60, pDown:false, pMeter:0, pCount:0, pCountT:0, pDowns:0, baseX:0, starArmed:false, endWhy:'' };
+const bv = new THREE.Vector3(), bv2 = new THREE.Vector3(), bHead = new THREE.Vector3(0, 1.7, 0.02), bBody = new THREE.Vector3(0, 1.25, 0.06);
+
+function bxDrawBar(){
+  BX.bar.draw((c, w, h) => {
+    c.fillStyle = 'rgba(12,16,32,0.85)'; rr(c, 2, 2, w-4, h-4, 12); c.fill();
+    c.fillStyle = '#ff5b4f'; rr(c, 8, 8, Math.max(10, (w-16) * Math.max(0, X.hp) / X.max), h-16, 8); c.fill();
+  });
+}
+function bxSetup(){
+  const o = bxOpp(); X.opp = o;
+  BX.skin.color.setHex(o.skin); BX.trunks.color.setHex(o.trunks); BX.hair.color.setHex(o.hair);
+  BX.g.scale.setScalar(o.scale); BX.g.position.set(0, 0, -0.72 - (o.scale - 1)*0.2); BX.g.rotation.set(0, 0, 0); BX.g.visible = true;
+  Object.assign(X, { state:'intro', st:now, hp:o.hp, max:o.hp, guard:'high', guardT:now + 2, downs:0, round:1, pDown:false, pDowns:0, starArmed:false, endWhy:'', headHits:0, ended:false, win:false, riseT:0 });
+  popup(o.name, '#f4c430', H + 0.12, -1.2); say(`${o.name}. ${o.quote}`);
+  S.hp = 100; S.stars = 0; S.landed = 0; S.thrown = 0; S.dodges = 0; S.starHits = 0; S.downsGiven = 0; S.dealt = 0; S.taken = 0;
+  X.baseX = headL.x; bxDrawBar();
+}
+function bxHide(){ BX.g.visible = false; pGloves.forEach(g => g.visible = false); X.state = 'off'; hurtSphere.material.opacity = 0; }
+function bxStartRound(n){
+  X.round = n; X.roundStart = now; X.baseX = headL.x; X.state = 'idle'; X.st = now; X.nextAtk = now + 1.2;
+  sfx.bell(); popup(`ROUND ${n}`, '#f4c430', H + 0.08, -1.3); say(`Round ${n}. Fight!`);
+  Music.set('steady', 118 + n*4);
+}
+function bxPickAttack(o){
+  let r = Math.random() * (o.w.jab + o.w.hook + o.w.upper);
+  const k = (r -= o.w.jab) < 0 ? 'jab' : (r -= o.w.hook) < 0 ? 'hook' : 'upper';
+  return k;
+}
+function bxTell(o, quick){
+  X.atk = bxPickAttack(o); X.side = Math.random() < 0.5 ? 'L' : 'R';
+  X.feint = Math.random() < o.feint;
+  X.tellLen = o.tell * (quick ? 0.6 : 1) * (1 - (X.round - 1)*0.06);
+  X.state = 'tell'; X.st = now; sfx.tellCue(X.atk);
+  K.threat = X.atk === 'jab' ? 'JAB! Dodge or block.' : X.atk === 'hook' ? `HOOK from your ${X.side === 'L' ? 'left' : 'right'}! Lean away or duck.` : 'UPPERCUT! Lean left or right.';
+}
+function bxDodged(){
+  const lean = headL.x - X.baseX, duck = isDucking();
+  if (X.atk === 'jab') return Math.abs(lean) > 0.11 || duck;
+  if (X.atk === 'hook') return duck || (X.side === 'L' ? lean > 0.11 : lean < -0.11);
+  return Math.abs(lean) > 0.11;
+}
+function bxResolve(o){
+  if (bxDodged()) {
+    S.dodges++; S.score += 30; sfx.whiff(); popup('DODGED!', '#37c6f4', H + 0.05, -0.6);
+    X.state = 'open'; X.st = now; K.threat = 'COUNTER NOW!'; return;
+  }
+  const dmgBase = { jab:9, hook:15, upper:21 }[X.atk] * o.power;
+  if (X.atk !== 'upper' && isBlocking()) {
+    S.hp -= dmgBase * 0.25; S.taken += dmgBase*0.25; sfx.blocked(); buzzBoth(0.6, 70); popup('BLOCKED', '#a3acc4', H - 0.05, -0.55);
+  } else {
+    S.hp -= dmgBase; S.taken += dmgBase; hurtT = now; sfx.thud(X.atk === 'upper'); buzzBoth(1, 220);
+    popup(X.atk === 'upper' ? 'UPPERCUT!' : X.atk === 'hook' ? 'HOOKED!' : 'JABBED!', '#ff5b4f', H - 0.05, -0.55);
+    if (S.stars > 0 && Math.random() < 0.5) { S.stars--; popup('STAR LOST', '#a3acc4', H - 0.2, -0.6); }
+  }
+  if (S.hp <= 0) bxPlayerDown();
+  X.state = 'recover'; X.st = now;
+}
+function bxPlayerDown(){
+  S.hp = 0; X.pDown = true; X.pDowns++; X.pMeter = 0; X.pCount = 0; X.pCountT = now + 0.9;
+  X.state = 'idle'; X.st = now; X.nextAtk = now + 99;
+  sfx.crowd(2); say('You\'re down! Shake it off!'); popup('DOWN!', '#ff5b4f', H, -0.8);
+  if (X.pDowns >= 3) bxFinish(false, 'TKO');
+}
+function bxOppDown(){
+  X.downs++; S.downsGiven++; X.state = 'down'; X.st = now; X.count = 0; X.countT = now + 1.0;
+  X.getUpAt = X.downs >= 3 ? 99 : [0, 4, 6][X.downs] + Math.floor(Math.random()*2);
+  sfx.crowd(2.2); R.dFlash = now; popup('KNOCKDOWN!', '#f4c430', H + 0.1, -1.1); say('Knockdown!');
+  S.score += 500;
+}
+function bxFinish(win, why){
+  if (X.ended) return; X.ended = true;
+  X.endWhy = why; X.win = win; X.state = win ? 'ko' : 'celebrate'; X.st = now;
+  if (win && (best.boxRank || 0) < BOXERS.length && X.opp === bxOpp()) { best.boxRank = Math.min(BOXERS.length, (best.boxRank || 0) + 1); }
+  if (win) { S.score += 2000 + Math.round(Math.max(0, S.hp) * 10); sfx.crowd(3); say(X.opp.champ ? 'New champion!' : `${why}! You win!`); }
+  else say(`${why}. ${X.opp.short} wins.`);
+  saveBest();
+  setTimeout(() => { if (G.mode === 'play') endRound(); }, 2600);
+}
+function bxPlace(){
+  // arms are drawn as cylinders from shoulder to glove
+  for (let i = 0; i < 2; i++) {
+    BX.gloves[i].position.copy(BX.gPos[i]);
+    const a = BX.shoulders[i], b = BX.gPos[i], m = BX.arms[i];
+    m.position.addVectors(a, b).multiplyScalar(0.5); bv.subVectors(b, a); m.scale.set(1, Math.max(0.05, bv.length() - 0.06), 1);
+    m.quaternion.setFromUnitVectors(UP, bv.normalize());
+  }
+}
+function bxAnimate(dt){
+  const t = now - X.st, o = X.opp, bob = Math.sin(now*5)*0.02;
+  const gi = X.side === 'L' ? 0 : 1; // glove index that attacks (his right hand = your left)
+  let tg = [new THREE.Vector3(-0.12, 1.56 + bob, 0.24), new THREE.Vector3(0.12, 1.56 + bob, 0.24)];
+  if (X.guard === 'low') tg = [new THREE.Vector3(-0.14, 1.18 + bob, 0.24), new THREE.Vector3(0.14, 1.18 + bob, 0.24)];
+  let lean = 0, dip = 0, turn = 0, glow = [0, 0], brow = 0, mouth = 1, eyeFlash = 0, sway = Math.sin(now*2.2)*0.04;
+  if (X.state === 'tell') {
+    const p = Math.min(1, t / X.tellLen), sx = gi === 0 ? -1 : 1;
+    if (X.atk === 'jab') tg[gi].set(sx*0.16, 1.5, 0.02);
+    else if (X.atk === 'hook') { tg[gi].set(sx*0.48, 1.52, -0.08); turn = -sx*0.35*p; }
+    else { tg[gi].set(sx*0.15, 0.98, 0.12); dip = 0.12*p; }
+    glow[gi] = p; brow = 0.5*p; eyeFlash = p > 0.6 ? (Math.sin(now*40) > 0 ? 1 : 0) : 0;
+  } else if (X.state === 'strike') {
+    stage.localToWorld(bv.copy(headL)); BX.g.worldToLocal(bv);
+    tg[gi].copy(bv); lean = 0.25; glow[gi] = 1; mouth = 2;
+  } else if (X.state === 'open' || X.state === 'taunt') {
+    tg = [new THREE.Vector3(-0.32, 1.05, 0.06), new THREE.Vector3(0.32, 1.05, 0.06)];
+    lean = -0.1; mouth = 2.4; brow = -0.5;
+    if (X.state === 'taunt') { sway = Math.sin(now*9)*0.12; tg[0].y = 1.7 + Math.sin(now*9)*0.1; tg[1].y = 1.7 - Math.sin(now*9)*0.1; mouth = 3; }
+  } else if (X.state === 'hurt') { lean = -0.3; mouth = 2.5; brow = -0.3; }
+  else if (X.state === 'down' || X.state === 'ko') { tg = [new THREE.Vector3(-0.3, 1.1, -0.1), new THREE.Vector3(0.3, 1.1, -0.1)]; }
+  else if (X.state === 'celebrate') { tg = [new THREE.Vector3(-0.3, 2.1, 0), new THREE.Vector3(0.3, 2.1, 0)]; mouth = 3; sway = Math.sin(now*6)*0.1; }
+  const k = X.state === 'strike' ? 1 - Math.exp(-dt*40) : 1 - Math.exp(-dt*12);
+  for (let i = 0; i < 2; i++) { BX.gPos[i].lerp(tg[i], k); BX.gloveM[i].emissive.setHex(0xffffff).multiplyScalar(glow[i]*0.55); }
+  bxPlace();
+  const fall = X.state === 'down' || X.state === 'ko' ? Math.min(1, t / 0.5) : 0;
+  const rise = X.state === 'down' && X.count >= X.getUpAt ? Math.min(1, (now - X.riseT) / 0.6) : 0;
+  BX.g.rotation.x += ((-1.35 * fall * (1 - rise)) - BX.g.rotation.x) * Math.min(1, dt*10);
+  BX.body.rotation.x += (lean - BX.body.rotation.x) * Math.min(1, dt*12);
+  BX.body.rotation.y += (turn - BX.body.rotation.y) * Math.min(1, dt*12);
+  BX.body.position.y += (-dip - BX.body.position.y) * Math.min(1, dt*12);
+  BX.body.position.x = sway;
+  X.hitSnap *= Math.exp(-dt*8); BX.headG.rotation.x = -X.hitSnap;
+  BX.brows[0].rotation.z = -brow*0.6; BX.brows[1].rotation.z = brow*0.6;
+  BX.mouth.scale.y += (mouth - BX.mouth.scale.y) * Math.min(1, dt*12);
+  BX.eyeW.emissive.setHex(0xffe040).multiplyScalar(eyeFlash);
+  const ko = X.state === 'ko' || X.state === 'down';
+  for (const p of BX.pupils) p.scale.setScalar(ko ? 0.3 : 1);
+}
+function bxPunches(dt){
+  if (X.pDown) return;
+  for (const sd of SIDES) {
+    const h = hands[sd]; if (!h.active) continue;
+    if (h.speed > 2.0 && !h.bxFast) { h.bxFast = true; S.thrown++; } else if (h.speed < 1.0) h.bxFast = false;
+    if (h.speed < 1.6 || now - (h.bxHit || -9) < 0.3) continue;
+    BX.g.worldToLocal(bv.copy(h.pos));
+    const sc = X.opp.scale;
+    const toHead = bv.distanceTo(bHead) < 0.19, toBody = !toHead && bv.distanceTo(bBody) < 0.25;
+    if (!toHead && !toBody) continue;
+    h.bxHit = now;
+    const st = X.state;
+    if (st === 'down' || st === 'ko' || st === 'intro' || st === 'celebrate' || st === 'break') continue;
+    const counter = st === 'tell';
+    const open = st === 'open' || st === 'taunt' || st === 'hurt' || counter;
+    const star = (h.grip || X.starArmed) && S.stars > 0;
+    let blocked = !open && ((toHead && X.guard === 'high') || (toBody && X.guard === 'low'));
+    if (star) blocked = false;
+    if (blocked) { sfx.blocked(); buzz(sd, 0.4, 30); popup('GUARDED', '#a3acc4', toHead ? 1.85*sc : 1.4*sc, BX.g.position.z + 0.2); X.headHits = 0; continue; }
+    let dmg = (toHead ? 7 : 5) * (open ? 1.6 : 1) * Math.min(1.5, 0.7 + h.speed*0.08);
+    if (star) { dmg = 26; S.stars--; S.starHits++; X.starArmed = false; sfx.star(); R.dFlash = now; popup('STAR PUNCH!', '#f4c430', 1.95*sc, BX.g.position.z + 0.2); buzz(sd, 1, 140); }
+    X.hp -= dmg; S.dealt += dmg; S.landed++; S.score += Math.round(dmg * 10);
+    X.hitSnap = toHead ? 0.5 : 0.15; sfx.thud(star); buzz(sd, 0.9, 50); bxDrawBar();
+    if (counter) { popup('COUNTER!', '#37c6f4', 1.95*sc, BX.g.position.z + 0.25); if (Math.random() < 0.6 && S.stars < 3) { S.stars++; popup('★ STAR EARNED', '#f4c430', 2.1*sc, BX.g.position.z + 0.2); } }
+    else if (st === 'open' && now - X.st < 0.35 && S.stars < 3 && Math.random() < 0.35) { S.stars++; popup('★ STAR EARNED', '#f4c430', 2.1*sc, BX.g.position.z + 0.2); }
+    if (toHead) X.headHits++;
+    if (X.hp <= 0) { X.hp = 0; bxDrawBar(); if (X.downs >= 2) { bxOppDown(); bxFinish(true, 'KO'); } else bxOppDown(); return; }
+    if (st !== 'open' && st !== 'taunt') { X.state = 'hurt'; X.st = now; }
+  }
+}
+function updateBX(dt, playing){
+  stage.worldToLocal(headL.copy(head.pos));
+  kfJumpDetect(dt);
+  SIDES.forEach((sd, i) => { const h = hands[sd]; pGloves[i].visible = h.active; if (h.active) { pGloves[i].position.copy(h.pos); pGloves[i].quaternion.copy(h.quat); } });
+  hurtSphere.position.copy(head.pos); hurtSphere.material.opacity = Math.max(0, 0.55 * (1 - (now - hurtT) / 0.5)) + (X.pDown ? 0.25 : 0);
+  if (X.state === 'off') return;
+  if (Math.abs(head.vy) < 0.1 && X.state === 'idle') X.baseX += (headL.x - X.baseX) * Math.min(1, dt*0.5);
+  bxAnimate(dt);
+  if (!playing) return;
+  const o = X.opp, t = now - X.st;
+  if (X.state === 'intro') { if (t > 0.2 && !X.introSaid) { X.introSaid = true; } if (t >= 0.6) bxStartRound(1); return; }
+  // round clock
+  if (['idle','tell','strike','recover','open','hurt','taunt'].includes(X.state) && !X.pDown && now - X.roundStart >= X.roundLen) {
+    if (X.round >= 3) { bxFinish(S.dealt > S.taken, 'DECISION'); return; }
+    X.state = 'break'; X.st = now; sfx.bell(); popup(`END OF ROUND ${X.round}`, '#eef1f8', H + 0.08, -1.3); say('Take a breather.');
+    Music.set('rest', 90); S.hp = Math.min(100, S.hp + 15); X.hp = Math.min(X.max, X.hp + X.max*0.08); bxDrawBar(); K.threat = 'Rest. Shake out your arms.';
+    return;
+  }
+  if (X.state === 'break') { if (t >= 6) bxStartRound(X.round + 1); return; }
+  // you are down: shake controllers to get up
+  if (X.pDown) {
+    let shake = 0; for (const sd of SIDES) if (hands[sd].active && hands[sd].speed > 1.5) shake += hands[sd].speed;
+    X.pMeter = Math.min(100, X.pMeter + shake*dt*7);
+    K.threat = `SHAKE TO GET UP! ${Math.round(X.pMeter)}%`;
+    if (X.pMeter >= 100) { X.pDown = false; S.hp = 45; X.state = 'idle'; X.st = now; X.nextAtk = now + 1.5; popup('BACK UP!', '#37c6f4', H, -0.8); say('Get back in there!'); }
+    else if (now >= X.pCountT) { X.pCount++; X.pCountT = now + 0.9; sfx.beep(false); popup(String(X.pCount), '#eef1f8', H + 0.1, -0.9); if (X.pCount >= 10) bxFinish(false, 'KO'); }
+    return;
+  }
+  if (X.state === 'down') {
+    if (now >= X.countT && X.count < 10) {
+      X.count++; X.countT = now + 0.85; popup(String(X.count), '#eef1f8', H + 0.15, -1.0); sfx.beep(X.count === 10);
+      if (X.count >= X.getUpAt && X.getUpAt < 99 && !X.riseT) X.riseT = now;
+      if (X.count >= 10 && X.getUpAt >= 99) { /* handled by finish */ }
+    }
+    if (X.riseT && now - X.riseT > 0.7) { X.riseT = 0; X.hp = X.max * [0, 0.5, 0.35][X.downs]; bxDrawBar(); X.state = 'idle'; X.st = now; X.nextAtk = now + 1.2; X.guard = 'high'; say(`${o.short} is back up!`); }
+    return;
+  }
+  if (X.state === 'ko' || X.state === 'celebrate') return;
+  K.threat = X.state === 'open' || X.state === 'taunt' ? 'OPEN! Punch now!' : X.state === 'tell' ? K.threat : X.guard === 'high' ? 'Guard is high. Go to the body.' : 'Guard is low. Go to the head.';
+  // guard switching
+  if (now >= X.guardT && (X.state === 'idle')) { X.guard = X.headHits >= 3 || Math.random() < 0.5 ? 'high' : 'low'; X.headHits = 0; X.guardT = now + 1.4 + Math.random()*1.6; }
+  if (X.state === 'idle' && now >= X.nextAtk) {
+    if (Math.random() < o.taunt) { X.state = 'taunt'; X.st = now; say(o.quote); }
+    else bxTell(o, false);
+  } else if (X.state === 'tell' && t >= X.tellLen) {
+    if (X.feint) { X.state = 'idle'; X.st = now; X.nextAtk = now + 0.5; popup('FEINT!', '#a3acc4', H + 0.1, -0.9); }
+    else { X.state = 'strike'; X.st = now; }
+  } else if (X.state === 'strike' && t >= 0.13) bxResolve(o);
+  else if (X.state === 'recover' && t >= 0.35) {
+    if (Math.random() < o.combo) bxTell(o, true);
+    else { X.state = 'idle'; X.st = now; X.nextAtk = now + o.cool[0] + Math.random()*(o.cool[1] - o.cool[0]) * (1 - (X.round-1)*0.1); }
+  } else if ((X.state === 'open' && t >= 1.2) || (X.state === 'taunt' && t >= 1.4) || (X.state === 'hurt' && t >= 0.3)) {
+    X.state = 'idle'; X.st = now; if (X.nextAtk < now + 0.6) X.nextAtk = now + 0.8;
+  }
+  bxPunches(dt);
+}
+function endBX(secs){
+  const o = X.opp, win = !!X.win;
+  const rec = S.score > (best.box || 0); if (rec) best.box = S.score; saveBest();
+  const acc = S.thrown ? Math.round(100 * S.landed / Math.max(S.thrown, S.landed)) : 0;
+  bxHide();
+  resultsP.draw((c, w, h) => {
+    panelBg(c, w, h);
+    c.textAlign = 'left'; c.fillStyle = win ? '#f4c430' : '#ff5b4f'; c.font = `900 92px ${FD}`;
+    c.fillText(win ? (o.champ ? 'CHAMPION!' : 'YOU WIN') : X.endWhy ? 'YOU LOSE' : 'FIGHT STOPPED', 70, 118);
+    c.fillStyle = '#a3acc4'; c.font = `700 34px ${FB}`; c.fillText(`${X.endWhy || 'Stopped'} vs ${o.name} · round ${X.round}`, 72, 168);
+    stat(c, 72, 215, 'Score', S.score.toLocaleString(), '#f4c430');
+    stat(c, 380, 215, 'Punches landed', `${S.landed}`, '#37c6f4');
+    stat(c, 680, 215, 'Accuracy', acc + '%');
+    stat(c, 72, 410, 'Dodges', String(S.dodges), '#37c6f4');
+    stat(c, 380, 410, 'Star punches', String(S.starHits), '#f4c430');
+    stat(c, 680, 410, 'Knockdowns', `${S.downsGiven} / ${X.pDowns}`);
+    c.fillStyle = '#a3acc4'; c.font = `500 30px ${FB}`;
+    const next = BOXERS[Math.min(best.boxRank || 0, BOXERS.length - 1)];
+    c.fillText(win && !o.champ ? `Next up: ${next.name}` : win ? 'You hold the belt. Defend it anytime.' : `Rematch ${o.short} with AGAIN.`, 72, 600);
+  });
+  results.visible = true; G.cool = now + 0.8; sfx.chime(); updateDock();
+}
+
 /* ---------- preview (no headset) ---------- */
-const P = { ndc:new THREE.Vector2(0, -0.2), punchT:-9, punchSide:'right', jumpT:-9, th:0, rpm:95, jd:0.38, jh:0.09, duck:false, duckAmt:0, block:false };
+const P = { ndc:new THREE.Vector2(0, -0.2), punchT:-9, punchSide:'right', jumpT:-9, th:0, rpm:95, jd:0.38, jh:0.09, duck:false, duckAmt:0, block:false, leanL:false, leanR:false, lean:0 };
 const ray = new THREE.Raycaster();
 function punchCurve(a){ if (a < 0 || a > 0.3) return 0; if (a < 0.08) return a/0.08; if (a < 0.12) return 1; return 1 - (a-0.12)/0.18; }
 function previewInput(dt){
   const ju = (now - P.jumpT) / P.jd;
   const jumpOff = ju >= 0 && ju <= 1 ? P.jh * Math.sin(Math.PI * ju) : 0;
   P.duckAmt += ((P.duck ? 1 : 0) - P.duckAmt) * Math.min(1, dt * 12);
-  head.pos.set(0, 1.6 + jumpOff - P.duckAmt*0.35, 0); head.quat.identity(); head.valid = true;
+  P.lean += (((P.leanR ? 1 : 0) - (P.leanL ? 1 : 0)) - P.lean) * Math.min(1, dt * 12);
+  head.pos.set(P.lean*0.2, 1.6 + jumpOff - P.duckAmt*0.35, 0); head.quat.identity(); head.valid = true;
   const active = G.mode === 'countdown' || G.mode === 'play';
-  const pitch = active ? (kfMode() ? -0.3 : chucksMode() ? -0.2 : -0.26) : 0;
+  const pitch = active ? (bxMode() ? -0.06 : kfMode() ? -0.3 : chucksMode() ? -0.2 : -0.26) : 0;
   camera.position.copy(head.pos); camera.rotation.set(pitch, 0, 0, 'YXZ');
   const roping = active && !chucksMode();
   for (const s of SIDES) hands[s].active = true;
@@ -1469,12 +1789,12 @@ function previewInput(dt){
     for (const s of SIDES) {
       const h = hands[s];
       if (s === side) {
-        h.pos.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 0.32 + 0.3*e);
+        h.pos.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 0.32 + (active && bxMode() ? 0.42 : 0.3)*e);
         if (active && chucksMode()) h.quat.setFromUnitVectors(new THREE.Vector3(0,0,-1), vC.copy(ray.ray.direction).add(UP).normalize());
         else h.quat.setFromUnitVectors(new THREE.Vector3(0,0,-1), ray.ray.direction);
       } else { h.pos.set(s === 'left' ? -0.2 : 0.2, H - 0.3, -0.35); if (active && chucksMode()) h.quat.setFromUnitVectors(new THREE.Vector3(0,0,-1), UP); else h.quat.identity(); }
     }
-    if (active && kfMode() && P.block) {
+    if (active && (kfMode() || bxMode()) && P.block) {
       for (const s of SIDES) { hands[s].pos.set(s === 'left' ? -0.07 : 0.07, head.pos.y - 0.04, -0.22); hands[s].quat.identity(); }
     }
   }
@@ -1483,7 +1803,7 @@ canvas.addEventListener('pointermove', (e) => { P.ndc.set(e.clientX/innerWidth*2
 canvas.addEventListener('pointerdown', (e) => {
   if (G.platform !== 'preview') return;
   P.ndc.set(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1);
-  if (G.mode === 'play' || G.mode === 'countdown') { if (chucksMode()) { P.punchSide = G.chHand; P.punchT = now; } else if (kfMode()) { P.punchSide = P.ndc.x < 0 ? 'left' : 'right'; P.punchT = now; } else previewJump(); return; }
+  if (G.mode === 'play' || G.mode === 'countdown') { if (chucksMode()) { P.punchSide = G.chHand; P.punchT = now; } else if (kfMode() || bxMode()) { P.punchSide = P.ndc.x < 0 ? 'left' : 'right'; P.punchT = now; } else previewJump(); return; }
   P.punchSide = P.ndc.x < 0 ? 'left' : 'right'; P.punchT = now;
 });
 function previewJump(){
@@ -1494,14 +1814,18 @@ function previewJump(){
 addEventListener('keydown', (e) => {
   if (G.platform !== 'preview') return;
   if (e.code === 'Space') { e.preventDefault(); if (chucksMode() && G.mode !== 'menu') { P.punchSide = G.chHand; P.punchT = now; } else previewJump(); }
-  if ((e.code === 'KeyS' || e.code === 'ArrowDown') && kfMode()) { e.preventDefault(); P.duck = true; }
-  if (e.code === 'KeyB' && kfMode()) P.block = true;
+  const fight = kfMode() || bxMode();
+  if ((e.code === 'KeyS' || e.code === 'ArrowDown') && fight) { e.preventDefault(); P.duck = true; }
+  if (e.code === 'KeyB' && fight) P.block = true;
+  if (bxMode()) { if (e.code === 'KeyA' || e.code === 'ArrowLeft') P.leanL = true; if (e.code === 'KeyD' || e.code === 'ArrowRight') P.leanR = true; if (e.code === 'KeyF') X.starArmed = true; }
   if (e.code === 'KeyC' && chucksMode() && (G.mode === 'play' || G.mode === 'countdown')) previewSwitch();
   if (e.code === 'Escape' && G.mode === 'play') endRound();
 });
 $('btnJump').addEventListener('pointerdown', (e) => { e.preventDefault(); previewJump(); });
-addEventListener('keyup', (e) => { if (e.code === 'KeyS' || e.code === 'ArrowDown') P.duck = false; if (e.code === 'KeyB') P.block = false; });
-for (const [id, key] of [['btnDuck', 'duck'], ['btnBlock', 'block']]) {
+addEventListener('keyup', (e) => { if (e.code === 'KeyS' || e.code === 'ArrowDown') P.duck = false; if (e.code === 'KeyB') P.block = false; if (e.code === 'KeyA' || e.code === 'ArrowLeft') P.leanL = false; if (e.code === 'KeyD' || e.code === 'ArrowRight') P.leanR = false; });
+$('btnStar').addEventListener('click', () => { if (S.stars > 0) { X.starArmed = true; popup('STAR READY', '#f4c430', H, -0.7); } });
+$('btnUp').addEventListener('click', () => { if (X.pDown) X.pMeter = Math.min(100, X.pMeter + 14); });
+for (const [id, key] of [['btnDuck', 'duck'], ['btnBlock', 'block'], ['btnLeanL', 'leanL'], ['btnLeanR', 'leanR']]) {
   const b = $(id);
   b.addEventListener('pointerdown', (e) => { e.preventDefault(); P[key] = true; });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { P[key] = false; });
@@ -1515,9 +1839,11 @@ function updateDock(){
   const pv = G.platform === 'preview';
   $('dock').hidden = !pv; if (!pv) return;
   const inRound = G.mode === 'play' || G.mode === 'countdown';
-  $('btnDuck').hidden = $('btnBlock').hidden = !inRound || !kfMode();
-  $('btnJump').hidden = !inRound || chucksMode(); $('btnEnd').hidden = !inRound; $('btnSwitch').hidden = !inRound || !chucksMode();
+  $('btnDuck').hidden = $('btnBlock').hidden = !inRound || !(kfMode() || bxMode());
+  $('btnLeanL').hidden = $('btnLeanR').hidden = $('btnStar').hidden = $('btnUp').hidden = !inRound || !bxMode();
+  $('btnJump').hidden = !inRound || chucksMode() || bxMode(); $('btnEnd').hidden = !inRound; $('btnSwitch').hidden = !inRound || !chucksMode();
   $('hint').textContent = !inRound ? 'Tap a pad to choose. Your hand follows where you point.'
+    : bxMode() ? 'Tap his head or body to punch. Hold Lean, Duck or Block to defend (or A/D/S/B). Star = F.'
     : kfMode() ? 'Tap a fighter to punch it. Hold Duck or Block, and Jump over sweeps.'
     : chucksMode() ? 'Move your pointer to swing. Click or tap to flick. Switch hands with the button or C.'
     : 'Tap Jump, the screen, or press Space as the rope reaches your feet.';
@@ -1562,7 +1888,7 @@ renderer.setAnimationLoop((t, frame) => {
       if (!h.was || h.pos.distanceTo(h.prev) > 0.3) { h.prev.copy(h.pos); h.vel.set(0,0,0); }
       const rv = tmpA.subVectors(h.pos, h.prev).divideScalar(dt);
       h.vel.lerp(rv, 0.6); h.speed = h.vel.length(); h.prev.copy(h.pos);
-      h.mesh.visible = G.mode !== 'idle' && !((chucksMode() || kfMode()) && (G.mode === 'play' || G.mode === 'countdown')); h.mesh.position.copy(h.pos); h.mesh.quaternion.copy(h.quat);
+      h.mesh.visible = G.mode !== 'idle' && !((chucksMode() || kfMode() || bxMode()) && (G.mode === 'play' || G.mode === 'countdown')); h.mesh.position.copy(h.pos); h.mesh.quaternion.copy(h.quat);
     } else h.mesh.visible = false;
     h.was = h.active;
   }
@@ -1585,9 +1911,9 @@ renderer.setAnimationLoop((t, frame) => {
     const left = Math.ceil(G.cdEnd - now);
     if (left !== G.lastCd) { G.lastCd = left; if (left > 0) { drawCount(String(left)); sfx.beep(false); } }
     if (now >= G.cdEnd) { G.mode = 'play'; G.startAt = now; G.nextBoard = now + 0.6; startBlock(0); drawCount('GO'); sfx.beep(true); buzzBoth(0.8, 120); setTimeout(() => { if (G.mode === 'play') countP.mesh.visible = false; }, 700); }
-    if (kfMode()) updateKF(dt, false); else if (chucksMode()) { Whoosh.start(); updateChucks(dt, false); } else updateRope(dt, false);
+    if (bxMode()) updateBX(dt, false); else if (kfMode()) updateKF(dt, false); else if (chucksMode()) { Whoosh.start(); updateChucks(dt, false); } else updateRope(dt, false);
   } else if (G.mode === 'play') {
-    if (kfMode()) updateKF(dt, true); else if (chucksMode()) updateChucks(dt, true); else updateRope(dt, true);
+    if (bxMode()) updateBX(dt, true); else if (kfMode()) updateKF(dt, true); else if (chucksMode()) updateChucks(dt, true); else updateRope(dt, true);
     if (G.mode === 'play') updateBlocks();
   } else if (G.mode === 'results') {
     padPulse(padAgain);
@@ -1614,7 +1940,7 @@ function applyLook(){
   updateLook();
 }
 function toIdle(){
-  Music.stop(); visBars.visible = false; hideChucks(); kfHide(); try { speechSynthesis.cancel(); } catch (e) {}
+  Music.stop(); visBars.visible = false; hideChucks(); kfHide(); bxHide(); try { speechSynthesis.cancel(); } catch (e) {}
   G.platform = 'none'; G.passthrough = false; G.mode = 'idle'; applyLook();
   head.pos.set(0, 1.6, 0); head.quat.identity(); alignStage();
   menu.visible = true; results.visible = false; hud.mesh.visible = false; countP.mesh.visible = false;
